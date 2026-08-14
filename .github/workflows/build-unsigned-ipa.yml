@@ -1,0 +1,122 @@
+name: Build unsigned IPA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unsigned-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build mDownloader
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Validate property lists
+        run: |
+          plutil -lint mDownloader/Info.plist
+          plutil -lint mDownloaderShare/Info.plist
+          plutil -lint mDownloaderWidget/Info.plist
+
+      - name: Compile simulator build
+        run: |
+          xcodebuild \
+            -project mDownloader.xcodeproj \
+            -scheme mDownloader \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/Simulator \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Capture reference-state screenshots
+        run: |
+          RUNTIME="$(xcrun simctl list runtimes --json | jq -r '.runtimes[] | select(.isAvailable == true and (.identifier | contains("iOS"))) | .identifier' | tail -1)"
+          DEVICE_TYPE="$(xcrun simctl list devicetypes --json | jq -r '.devicetypes[] | select(.name == "iPhone 16 Pro") | .identifier' | head -1)"
+          test -n "$RUNTIME"
+          test -n "$DEVICE_TYPE"
+          DEVICE_ID="$(xcrun simctl create 'mDownloader QA' "$DEVICE_TYPE" "$RUNTIME")"
+          xcrun simctl boot "$DEVICE_ID"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl install "$DEVICE_ID" build/Simulator/Build/Products/Debug-iphonesimulator/mDownloader.app
+          mkdir -p build/Screenshots
+
+          capture() {
+            TAB="$1"
+            MODE="$2"
+            NAME="$3"
+            xcrun simctl terminate "$DEVICE_ID" com.munesh.mDownloader || true
+            SIMCTL_CHILD_MDOWNLOADER_DEMO=1 \
+            SIMCTL_CHILD_MDOWNLOADER_TAB="$TAB" \
+            SIMCTL_CHILD_MDOWNLOADER_APPEARANCE="$MODE" \
+              xcrun simctl launch "$DEVICE_ID" com.munesh.mDownloader
+            sleep 3
+            xcrun simctl io "$DEVICE_ID" screenshot "build/Screenshots/$NAME.png"
+          }
+
+          capture downloads light downloads-light
+          capture files light files-light
+          capture settings light settings-light
+          capture downloads dark downloads-dark
+          capture files dark files-dark
+          capture settings dark settings-dark
+          xcrun simctl shutdown "$DEVICE_ID"
+
+      - name: Compile unsigned device build
+        run: |
+          xcodebuild \
+            -project mDownloader.xcodeproj \
+            -scheme mDownloader \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/Device \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH='build/Device/Build/Products/Release-iphoneos/mDownloader.app'
+          test -d "$APP_PATH"
+          mkdir -p build/Payload
+          cp -R "$APP_PATH" build/Payload/
+          ditto -c -k --sequesterRsrc --keepParent build/Payload build/mDownloader-unsigned.ipa
+          shasum -a 256 build/mDownloader-unsigned.ipa > build/mDownloader-unsigned.ipa.sha256
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: mDownloader-unsigned-${{ github.sha }}
+          path: |
+            build/mDownloader-unsigned.ipa
+            build/mDownloader-unsigned.ipa.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload visual QA screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: mDownloader-screenshots-${{ github.sha }}
+          path: build/Screenshots/*.png
+          if-no-files-found: error
+          retention-days: 14

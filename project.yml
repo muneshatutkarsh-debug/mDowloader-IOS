@@ -1,0 +1,100 @@
+name: mDownloader
+
+options:
+  bundleIdPrefix: com.munesh
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.0.0"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: true
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: true
+
+targets:
+  mDownloader:
+    type: application
+    platform: iOS
+    sources:
+      - path: mDownloader
+      - path: Shared
+    info:
+      path: mDownloader/Info.plist
+    entitlements:
+      path: mDownloader/mDownloader.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.munesh.mDownloader
+        PRODUCT_NAME: mDownloader
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: mDownloader/Info.plist
+        CODE_SIGN_ENTITLEMENTS: mDownloader/mDownloader.entitlements
+    dependencies:
+      - target: mDownloaderWidget
+        embed: true
+      - target: mDownloaderShare
+        embed: true
+    scheme:
+      gatherCoverageData: false
+      testTargets:
+        - mDownloaderTests
+
+  mDownloaderWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: mDownloaderWidget
+      - path: Shared/DownloadRecord.swift
+      - path: Shared/DownloadActivityAttributes.swift
+      - path: Shared/SharedStorage.swift
+    info:
+      path: mDownloaderWidget/Info.plist
+    entitlements:
+      path: mDownloaderWidget/mDownloaderWidget.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.munesh.mDownloader.widget
+        PRODUCT_NAME: mDownloaderWidget
+        INFOPLIST_FILE: mDownloaderWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: mDownloaderWidget/mDownloaderWidget.entitlements
+        APPLICATION_EXTENSION_API_ONLY: true
+        SKIP_INSTALL: true
+
+  mDownloaderShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: mDownloaderShare
+      - path: Shared/DownloadRecord.swift
+      - path: Shared/SharedStorage.swift
+    info:
+      path: mDownloaderShare/Info.plist
+    entitlements:
+      path: mDownloaderShare/mDownloaderShare.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.munesh.mDownloader.share
+        PRODUCT_NAME: mDownloaderShare
+        INFOPLIST_FILE: mDownloaderShare/Info.plist
+        CODE_SIGN_ENTITLEMENTS: mDownloaderShare/mDownloaderShare.entitlements
+        APPLICATION_EXTENSION_API_ONLY: true
+        SKIP_INSTALL: true
+
+  mDownloaderTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: mDownloaderTests
+    dependencies:
+      - target: mDownloader
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.munesh.mDownloader.tests
+        GENERATE_INFOPLIST_FILE: true
