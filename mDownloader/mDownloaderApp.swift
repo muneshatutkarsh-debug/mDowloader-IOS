@@ -30,9 +30,9 @@ struct mDownloaderApp: App {
             return demoAppearance == "dark" ? .dark : .light
         }
         switch AppearanceMode(rawValue: appearanceMode) ?? .system {
-        case .light: .light
-        case .dark: .dark
-        case .system: nil
+        case .light: return ColorScheme.light
+        case .dark: return ColorScheme.dark
+        case .system: return nil
         }
     }
 }
