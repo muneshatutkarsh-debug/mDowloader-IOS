@@ -1,9 +1,7 @@
-name: Build unsigned IPA
+name: Build private unsigned IPA
 
 on:
   push:
-    branches: [main]
-  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -11,135 +9,124 @@ permissions:
   contents: read
 
 concurrency:
-  group: unsigned-ipa-${{ github.ref }}
+  group: idm-private-ipa-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build mDownloader
+  build-ipa:
+    name: Compile IDM for sideloading
     runs-on: macos-15
     timeout-minutes: 30
 
     steps:
-      - name: Check out source
-        uses: actions/checkout@v5
+      - name: Check out project
+        uses: actions/checkout@v4
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Generate Xcode project
-        run: xcodegen generate
-
-      - name: Validate property lists
+      - name: Select Xcode 26
+        shell: bash
         run: |
-          plutil -lint mDownloader/Info.plist
-          plutil -lint mDownloaderShare/Info.plist
-          plutil -lint mDownloaderWidget/Info.plist
-
-      - name: Compile simulator build
-        run: |
-          xcodebuild \
-            -project mDownloader.xcodeproj \
-            -scheme mDownloader \
-            -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build/Simulator \
-            build
-
-      - name: Capture reference-state screenshots
-        continue-on-error: true
-        run: |
-          RUNTIME="$(xcrun simctl list runtimes --json | jq -r '.runtimes[] | select(.isAvailable == true and (.identifier | contains("iOS"))) | .identifier' | tail -1)"
-          DEVICE_TYPE="$(xcrun simctl list devicetypes --json | jq -r '.devicetypes[] | select(.name == "iPhone 16 Pro") | .identifier' | head -1)"
-          test -n "$RUNTIME"
-          test -n "$DEVICE_TYPE"
-          DEVICE_ID="$(xcrun simctl create 'mDownloader QA' "$DEVICE_TYPE" "$RUNTIME")"
-          xcrun simctl boot "$DEVICE_ID"
-          xcrun simctl bootstatus "$DEVICE_ID" -b
-          QA_APP='build/QA/mDownloader.app'
-          mkdir -p build/QA
-          cp -R build/Simulator/Build/Products/Debug-iphonesimulator/mDownloader.app "$QA_APP"
-          plutil -p "$QA_APP/Info.plist"
-          test -d "$QA_APP/LaunchScreen.storyboardc"
-          test "$(plutil -extract UILaunchStoryboardName raw "$QA_APP/Info.plist")" = 'LaunchScreen'
-          test "$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$QA_APP/PlugIns/mDownloaderWidget.appex/Info.plist")" = 'com.apple.widgetkit-extension'
-          test "$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$QA_APP/PlugIns/mDownloaderShare.appex/Info.plist")" = 'com.apple.share-services'
-          codesign --force --deep --sign - --timestamp=none "$QA_APP"
-          xcrun simctl install "$DEVICE_ID" "$QA_APP"
-          mkdir -p build/Screenshots
-
-          capture() {
-            TAB="$1"
-            MODE="$2"
-            NAME="$3"
-            xcrun simctl terminate "$DEVICE_ID" com.munesh.mDownloader || true
-            SIMCTL_CHILD_MDOWNLOADER_DEMO=1 \
-            SIMCTL_CHILD_MDOWNLOADER_TAB="$TAB" \
-            SIMCTL_CHILD_MDOWNLOADER_APPEARANCE="$MODE" \
-              xcrun simctl launch "$DEVICE_ID" com.munesh.mDownloader
-            sleep 3
-            xcrun simctl io "$DEVICE_ID" screenshot "build/Screenshots/$NAME.png"
-          }
-
-          capture downloads light downloads-light
-          capture files light files-light
-          capture settings light settings-light
-          capture downloads dark downloads-dark
-          capture files dark files-dark
-          capture settings dark settings-dark
-          xcrun simctl shutdown "$DEVICE_ID"
-
-      - name: Emit visual QA previews
-        run: |
-          mkdir -p build/PreviewLogs
-          for image in build/Screenshots/*.png; do
-            name="$(basename "$image" .png)"
-            preview="build/PreviewLogs/$name.jpg"
-            sips -s format jpeg -s formatOptions 65 --resampleWidth 393 "$image" --out "$preview" >/dev/null
-            echo "QA_IMAGE_BEGIN:$name"
-            base64 < "$preview" | tr -d '\n'
-            echo
-            echo "QA_IMAGE_END:$name"
+          set -euo pipefail
+          # Liquid Glass and the iOS 26 SDK require Xcode 26+. Pick the newest
+          # installed Xcode 26.x, falling back to the default Xcode.app.
+          XCODE_PATH=""
+          for candidate in $(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V -r); do
+            if [[ -d "$candidate/Contents/Developer" ]]; then
+              XCODE_PATH="$candidate/Contents/Developer"
+              break
+            fi
           done
+          if [[ -z "$XCODE_PATH" && -d "/Applications/Xcode.app/Contents/Developer" ]]; then
+            XCODE_PATH="/Applications/Xcode.app/Contents/Developer"
+          fi
+          if [[ -z "$XCODE_PATH" ]]; then
+            echo "No Xcode 26 found on this runner. Installed Xcodes:"
+            ls -1 /Applications | grep '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select --switch "$XCODE_PATH"
+          xcodebuild -version
+          XCODE_MAJOR="$(xcodebuild -version | sed -n 's/^Xcode \([0-9][0-9]*\).*/\1/p')"
+          if [[ -z "$XCODE_MAJOR" || "$XCODE_MAJOR" -lt 26 ]]; then
+            echo "Xcode 26 or newer is required (iOS 26 / Liquid Glass). Installed Xcodes:"
+            ls -1 /Applications | grep '^Xcode' || true
+            exit 1
+          fi
 
-      - name: Compile unsigned device build
+      - name: Locate and inspect Xcode project
+        id: project
+        shell: bash
         run: |
+          set -euo pipefail
+          PROJECT_PATH="$(find "$GITHUB_WORKSPACE" -type d -name 'IDM.xcodeproj' -print -quit)"
+          if [[ -z "$PROJECT_PATH" ]]; then
+            echo "IDM.xcodeproj was not found. Upload the complete project folder."
+            exit 1
+          fi
+          echo "path=$PROJECT_PATH" >> "$GITHUB_OUTPUT"
+          xcodebuild -project "$PROJECT_PATH" -list
+
+      - name: Build unsigned iPhone application
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -o pipefail
           xcodebuild \
-            -project mDownloader.xcodeproj \
-            -scheme mDownloader \
+            -project "${{ steps.project.outputs.path }}" \
+            -scheme IDM \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath build/Device \
+            -derivedDataPath "$RUNNER_TEMP/IDM-DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY='' \
-            build
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            clean build 2>&1 | tee "$GITHUB_WORKSPACE/xcodebuild.log"
 
       - name: Package unsigned IPA
+        shell: bash
         run: |
-          APP_PATH='build/Device/Build/Products/Release-iphoneos/mDownloader.app'
+          set -euo pipefail
+          APP_PATH="$RUNNER_TEMP/IDM-DerivedData/Build/Products/Release-iphoneos/IDM.app"
+          ARTIFACT_DIR="$GITHUB_WORKSPACE/artifacts"
+          PACKAGE_ROOT="$RUNNER_TEMP/IDM-Package"
+
           test -d "$APP_PATH"
-          mkdir -p build/Payload
-          cp -R "$APP_PATH" build/Payload/
-          ditto -c -k --sequesterRsrc --keepParent build/Payload build/mDownloader-unsigned.ipa
-          shasum -a 256 build/mDownloader-unsigned.ipa > build/mDownloader-unsigned.ipa.sha256
+          test -d "$APP_PATH/PlugIns/IDMLiveActivity.appex"
+          test -d "$APP_PATH/PlugIns/IDMShareExtension.appex"
 
-      - name: Upload unsigned IPA
+          # Preserve the App Group claims so personal sideloading tools can
+          # request matching profiles while re-signing the IPA.
+          codesign --force --sign - \
+            --entitlements "$GITHUB_WORKSPACE/IDMShareExtension/IDMShareExtension.entitlements" \
+            "$APP_PATH/PlugIns/IDMShareExtension.appex"
+          codesign --force --sign - "$APP_PATH/PlugIns/IDMLiveActivity.appex"
+          codesign --force --sign - \
+            --entitlements "$GITHUB_WORKSPACE/IDM/IDM.entitlements" \
+            "$APP_PATH"
+          codesign --verify --deep --strict "$APP_PATH"
+
+          mkdir -p "$ARTIFACT_DIR" "$PACKAGE_ROOT/Payload"
+          ditto "$APP_PATH" "$PACKAGE_ROOT/Payload/IDM.app"
+          ditto -c -k --sequesterRsrc --keepParent "$PACKAGE_ROOT/Payload" "$ARTIFACT_DIR/IDM-unsigned.ipa"
+          shasum -a 256 "$ARTIFACT_DIR/IDM-unsigned.ipa" | tee "$ARTIFACT_DIR/IDM-unsigned.ipa.sha256"
+          unzip -t "$ARTIFACT_DIR/IDM-unsigned.ipa"
+
+          {
+            echo "## IDM unsigned IPA created"
+            echo ""
+            echo "Download the **IDM-unsigned-IPA** artifact from this workflow run."
+            echo "The IPA contains the IDM app, its Live Activity extension, and its Share extension."
+            echo "It has not been submitted to Apple and contains no signing identity."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sideloading package
         uses: actions/upload-artifact@v4
         with:
-          name: mDownloader-unsigned-${{ github.sha }}
+          name: IDM-unsigned-IPA
           path: |
-            build/mDownloader-unsigned.ipa
-            build/mDownloader-unsigned.ipa.sha256
+            artifacts/IDM-unsigned.ipa
+            artifacts/IDM-unsigned.ipa.sha256
+            xcodebuild.log
           if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload visual QA screenshots
-        uses: actions/upload-artifact@v4
-        with:
-          name: mDownloader-screenshots-${{ github.sha }}
-          path: build/Screenshots/*.png
-          if-no-files-found: warn
           retention-days: 14
-
