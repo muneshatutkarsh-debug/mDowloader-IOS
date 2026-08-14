@@ -62,6 +62,8 @@ jobs:
           if [ -d "$QA_APP/PlugIns" ]; then
             /bin/rm -rf "$QA_APP/PlugIns"
           fi
+          plutil -p "$QA_APP/Info.plist"
+          test -d "$QA_APP/LaunchScreen.storyboardc"
           codesign --force --deep --sign - --timestamp=none "$QA_APP"
           xcrun simctl install "$DEVICE_ID" "$QA_APP"
           mkdir -p build/Screenshots
@@ -140,3 +142,4 @@ jobs:
           path: build/Screenshots/*.png
           if-no-files-found: warn
           retention-days: 14
+

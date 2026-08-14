@@ -35,7 +35,10 @@ targets:
         PRODUCT_NAME: mDownloader
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_FILE: mDownloader/Info.plist
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
         CODE_SIGN_ENTITLEMENTS: mDownloader/mDownloader.entitlements
+        TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - target: mDownloaderWidget
         embed: true
@@ -98,3 +101,4 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.munesh.mDownloader.tests
         GENERATE_INFOPLIST_FILE: true
+
