@@ -44,7 +44,6 @@ jobs:
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/Simulator \
-            CODE_SIGNING_ALLOWED=NO \
             build
 
       - name: Capture reference-state screenshots
