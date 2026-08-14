@@ -7,11 +7,19 @@ struct DownloadsView: View {
     @State private var showingNewDownload = false
 
     private var visibleRecords: [DownloadRecord] {
-        manager.records.filter { record in
+        let matches = manager.records.filter { record in
             record.state != .cancelled && (
                 searchText.isEmpty || record.fileName.localizedCaseInsensitiveContains(searchText)
             )
         }
+        guard searchText.isEmpty else { return matches }
+
+        let active = matches.filter { $0.state != .completed }
+        let mostRecentCompleted = matches
+            .filter { $0.state == .completed }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(1)
+        return active + mostRecentCompleted
     }
 
     var body: some View {
@@ -61,7 +69,7 @@ struct DownloadsView: View {
                 .environmentObject(manager)
                 .presentationDetents([.medium, .large])
         }
-        .alert("Couldn’t start download", isPresented: errorBinding) {
+        .alert("Couldnâ€™t start download", isPresented: errorBinding) {
             Button("OK", role: .cancel) { manager.lastErrorMessage = nil }
         } message: {
             Text(manager.lastErrorMessage ?? "The link could not be downloaded.")

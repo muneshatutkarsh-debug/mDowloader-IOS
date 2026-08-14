@@ -35,7 +35,7 @@ struct SettingsView: View {
                 }
 
                 MockupSectionLabel(text: "Appearance")
-                Picker("Appearance", selection: $appearanceMode) {
+                Picker("Appearance", selection: appearanceSelection) {
                     Text("Light").tag(AppearanceMode.light.rawValue)
                     Text("Dark").tag(AppearanceMode.dark.rawValue)
                     Text("System").tag(AppearanceMode.system.rawValue)
@@ -83,7 +83,7 @@ struct SettingsView: View {
                 }
                 .mDownloaderCard()
 
-                Text("Downloads use Apple’s background transfer service. Speed is not capped and automatically follows the server and your connection.")
+                Text("Downloads use Appleâ€™s background transfer service. Speed is not capped and automatically follows the server and your connection.")
                     .font(.footnote)
                     .foregroundStyle(BrandPalette.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -160,6 +160,17 @@ struct SettingsView: View {
 
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+    }
+
+    private var appearanceSelection: Binding<String> {
+        Binding(
+            get: {
+                ProcessInfo.processInfo.environment["MDOWNLOADER_APPEARANCE"] == "dark"
+                    ? AppearanceMode.dark.rawValue
+                    : appearanceMode
+            },
+            set: { appearanceMode = $0 }
+        )
     }
 }
 
