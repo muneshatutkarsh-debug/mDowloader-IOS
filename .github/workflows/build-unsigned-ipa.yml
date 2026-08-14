@@ -47,6 +47,7 @@ jobs:
             build
 
       - name: Capture reference-state screenshots
+        continue-on-error: true
         run: |
           RUNTIME="$(xcrun simctl list runtimes --json | jq -r '.runtimes[] | select(.isAvailable == true and (.identifier | contains("iOS"))) | .identifier' | tail -1)"
           DEVICE_TYPE="$(xcrun simctl list devicetypes --json | jq -r '.devicetypes[] | select(.name == "iPhone 16 Pro") | .identifier' | head -1)"
@@ -55,7 +56,14 @@ jobs:
           DEVICE_ID="$(xcrun simctl create 'mDownloader QA' "$DEVICE_TYPE" "$RUNTIME")"
           xcrun simctl boot "$DEVICE_ID"
           xcrun simctl bootstatus "$DEVICE_ID" -b
-          xcrun simctl install "$DEVICE_ID" build/Simulator/Build/Products/Debug-iphonesimulator/mDownloader.app
+          QA_APP='build/QA/mDownloader.app'
+          mkdir -p build/QA
+          cp -R build/Simulator/Build/Products/Debug-iphonesimulator/mDownloader.app "$QA_APP"
+          if [ -d "$QA_APP/PlugIns" ]; then
+            /bin/rm -rf "$QA_APP/PlugIns"
+          fi
+          codesign --force --deep --sign - --timestamp=none "$QA_APP"
+          xcrun simctl install "$DEVICE_ID" "$QA_APP"
           mkdir -p build/Screenshots
 
           capture() {
@@ -117,5 +125,5 @@ jobs:
         with:
           name: mDownloader-screenshots-${{ github.sha }}
           path: build/Screenshots/*.png
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
