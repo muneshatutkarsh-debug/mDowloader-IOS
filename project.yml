@@ -25,8 +25,6 @@ targets:
     sources:
       - path: mDownloader
       - path: Shared
-    info:
-      path: mDownloader/Info.plist
     entitlements:
       path: mDownloader/mDownloader.entitlements
     settings:
@@ -57,8 +55,6 @@ targets:
       - path: Shared/DownloadRecord.swift
       - path: Shared/DownloadActivityAttributes.swift
       - path: Shared/SharedStorage.swift
-    info:
-      path: mDownloaderWidget/Info.plist
     entitlements:
       path: mDownloaderWidget/mDownloaderWidget.entitlements
     settings:
@@ -77,8 +73,6 @@ targets:
       - path: mDownloaderShare
       - path: Shared/DownloadRecord.swift
       - path: Shared/SharedStorage.swift
-    info:
-      path: mDownloaderShare/Info.plist
     entitlements:
       path: mDownloaderShare/mDownloaderShare.entitlements
     settings:

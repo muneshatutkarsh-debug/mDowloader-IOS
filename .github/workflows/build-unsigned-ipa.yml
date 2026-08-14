@@ -59,11 +59,11 @@ jobs:
           QA_APP='build/QA/mDownloader.app'
           mkdir -p build/QA
           cp -R build/Simulator/Build/Products/Debug-iphonesimulator/mDownloader.app "$QA_APP"
-          if [ -d "$QA_APP/PlugIns" ]; then
-            /bin/rm -rf "$QA_APP/PlugIns"
-          fi
           plutil -p "$QA_APP/Info.plist"
           test -d "$QA_APP/LaunchScreen.storyboardc"
+          test "$(plutil -extract UILaunchStoryboardName raw "$QA_APP/Info.plist")" = 'LaunchScreen'
+          test "$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$QA_APP/PlugIns/mDownloaderWidget.appex/Info.plist")" = 'com.apple.widgetkit-extension'
+          test "$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$QA_APP/PlugIns/mDownloaderShare.appex/Info.plist")" = 'com.apple.share-services'
           codesign --force --deep --sign - --timestamp=none "$QA_APP"
           xcrun simctl install "$DEVICE_ID" "$QA_APP"
           mkdir -p build/Screenshots
