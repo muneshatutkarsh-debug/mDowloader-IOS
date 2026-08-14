@@ -212,27 +212,39 @@ final class ShareViewController: UIViewController {
         complete()
     }
 
-    /// Direct UIApplication access is intentionally enabled only for this
-    /// private sideloaded build. The App Group queue remains the safe fallback.
+    /// Ask the extension host to open mDownloader. iOS may reject this for a
+    /// Share extension, so the App Group queue remains the reliable fallback.
     private func openHostApp(_ url: URL, isSafelyQueued: Bool) {
-        UIApplication.shared.open(url, options: [:]) { [weak self] opened in
+        extensionContext?.open(url) { [weak self] opened in
             guard let self else { return }
             if opened {
                 self.complete()
                 return
             }
 
-            self.extensionContext?.open(url) { [weak self] extensionOpened in
-                guard let self else { return }
-                if extensionOpened {
-                    self.complete()
-                } else if isSafelyQueued {
-                    self.showQueued()
-                } else {
-                    self.showHandoffFailure()
+            if self.openUsingResponderChain(url) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                    self?.complete()
                 }
+            } else if isSafelyQueued {
+                self.showQueued()
+            } else {
+                self.showHandoffFailure()
             }
         }
+    }
+
+    private func openUsingResponderChain(_ url: URL) -> Bool {
+        let selector = NSSelectorFromString("openURL:")
+        var responder: UIResponder? = self
+        while let current = responder {
+            if current.responds(to: selector) {
+                _ = current.perform(selector, with: url)
+                return true
+            }
+            responder = current.next
+        }
+        return false
     }
 
     private func enqueue(_ url: URL) -> String? {
