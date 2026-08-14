@@ -71,7 +71,9 @@ final class DownloadManager: NSObject, ObservableObject {
         task.taskDescription = record.id.uuidString
         task.resume()
         requestNotificationPermissionIfNeeded()
-        LiveActivityController.shared.start(for: record)
+        Task { @MainActor in
+            LiveActivityController.shared.start(for: record)
+        }
         return record.id
     }
 
@@ -233,10 +235,12 @@ final class DownloadManager: NSObject, ObservableObject {
             }
             guard let record = self.records.first(where: { $0.id == id }) else { return }
             self.persistAndRefreshWidgets()
-            if record.state == .completed || record.state == .failed || record.state == .cancelled {
-                LiveActivityController.shared.end(record)
-            } else {
-                LiveActivityController.shared.update(record)
+            Task { @MainActor in
+                if record.state == .completed || record.state == .failed || record.state == .cancelled {
+                    LiveActivityController.shared.end(record)
+                } else {
+                    LiveActivityController.shared.update(record)
+                }
             }
         }
     }

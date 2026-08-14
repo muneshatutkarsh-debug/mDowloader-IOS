@@ -83,6 +83,8 @@ struct BrandedProgressBar: View {
         GeometryReader { proxy in
             let clamped = progress.clamped(to: 0...1)
             let filledWidth = proxy.size.width * clamped
+            let knobDiameter = height + 8
+            let maxKnobOffset = max(proxy.size.width - knobDiameter, CGFloat.zero)
             ZStack(alignment: .leading) {
                 Capsule().fill(BrandPalette.secondaryText.opacity(0.25))
                 Capsule()
@@ -93,8 +95,8 @@ struct BrandedProgressBar: View {
                         .fill(BrandPalette.arrowRed)
                         .overlay(Circle().stroke(.white, lineWidth: 2.5))
                         .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
-                        .frame(width: height + 8, height: height + 8)
-                        .offset(x: (filledWidth - (height + 8) / 2).clamped(to: 0...(max(proxy.size.width - height - 8, 0))))
+                        .frame(width: knobDiameter, height: knobDiameter)
+                        .offset(x: (filledWidth - knobDiameter / 2).clamped(to: CGFloat.zero...maxKnobOffset))
                 }
             }
         }
@@ -262,4 +264,3 @@ struct ActivityShareSheet: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
-
