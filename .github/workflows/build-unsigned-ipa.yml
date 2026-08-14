@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -86,6 +86,19 @@ jobs:
           capture files dark files-dark
           capture settings dark settings-dark
           xcrun simctl shutdown "$DEVICE_ID"
+
+      - name: Emit visual QA previews
+        run: |
+          mkdir -p build/PreviewLogs
+          for image in build/Screenshots/*.png; do
+            name="$(basename "$image" .png)"
+            preview="build/PreviewLogs/$name.jpg"
+            sips -s format jpeg -s formatOptions 65 --resampleWidth 393 "$image" --out "$preview" >/dev/null
+            echo "QA_IMAGE_BEGIN:$name"
+            base64 < "$preview" | tr -d '\n'
+            echo
+            echo "QA_IMAGE_END:$name"
+          done
 
       - name: Compile unsigned device build
         run: |
